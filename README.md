@@ -29,3 +29,24 @@ vp check
 vp run test
 npm pack
 ```
+
+## Publishing
+
+GitHub Actions checks branches and pull requests. Tags matching `v<package.json version>` publish through npm Trusted Publishing; the existing `prepublishOnly` script runs checks, tests, and the build before publishing.
+
+Publish the first version with your npm login, then register `ph0ryn/cfalias` and `publish.yml` as the Trusted Publisher (npm 11.15+):
+
+```sh
+npm login
+npm publish --access public
+npm trust github cfalias --repo ph0ryn/cfalias --file publish.yml --allow-publish
+```
+
+The first version must exist before you can register the publisher. Later releases use GitHub Actions OIDC without an npm token. See the [npm trusted publishing requirements](https://docs.npmjs.com/trusted-publishers/).
+
+After configuring the publisher, release a new version with:
+
+```sh
+npm version patch -m "chore(release): %s"
+git push origin main --follow-tags
+```

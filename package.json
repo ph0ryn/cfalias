@@ -9,6 +9,10 @@
     "email-routing"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ph0ryn/cfalias.git"
+  },
   "bin": {
     "cfalias": "dist/cli.mjs"
   },

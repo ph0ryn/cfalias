@@ -1,0 +1,43 @@
+name: Publish Package
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1.21.1
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          run-install: false
+
+      - name: Check release tag
+        run: |
+          node --input-type=module <<'JS'
+          import packageInfo from './package.json' with { type: 'json' };
+
+          if (process.env.GITHUB_REF_NAME !== `v${packageInfo.version}`) {
+            throw new Error('The release tag must match the version in package.json.');
+          }
+          JS
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Publish to npm with OIDC
+        run: npm exec --yes --package=npm@11.19.0 -- npm publish --access public
