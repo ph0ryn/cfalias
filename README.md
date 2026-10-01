@@ -34,15 +34,16 @@ npm pack
 
 GitHub Actions checks branches and pull requests. Tags matching `v<package.json version>` publish through npm Trusted Publishing; the existing `prepublishOnly` script runs checks, tests, and the build before publishing.
 
-Publish the first version with your npm login, then register `ph0ryn/cfalias` and `publish.yml` as the Trusted Publisher (npm 11.15+):
+Log in and register `ph0ryn/cfalias` and `publish.yml` as the Trusted Publisher (npm 11.15+):
 
 ```sh
 npm login
-npm publish --access public
 npm trust github cfalias --repo ph0ryn/cfalias --file publish.yml --allow-publish
 ```
 
-The first version must exist before you can register the publisher. Later releases use GitHub Actions OIDC without an npm token. See the [npm trusted publishing requirements](https://docs.npmjs.com/trusted-publishers/).
+The package must exist on npm before you can register the publisher. For a new package, `npm stage publish` creates a `0.0.0-stage` placeholder, allowing you to register the publisher before the first regular release. See [staged publishing](https://docs.npmjs.com/staged-publishing/).
+
+Releases use GitHub Actions OIDC without an npm token. See the [npm trusted publishing requirements](https://docs.npmjs.com/trusted-publishers/).
 
 After configuring the publisher, release a new version with:
 
