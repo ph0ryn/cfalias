@@ -19,7 +19,7 @@ appendFileSync(
   })}\n`,
 );
 
-if (process.env.CFALIAS_TEST_FAILURE) {
+if (process.env.CFALIAS_TEST_FAILURE === "1" || process.env.CFALIAS_TEST_FAILURE === args[2]) {
   console.error("Cloudflare request failed.");
   process.exit(7);
 }

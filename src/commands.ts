@@ -175,6 +175,7 @@ export async function main(args: string[]): Promise<void> {
     }
 
     runCf(["email-routing", "rules", "delete", rule.id, "--zone", domain, "--force"]);
+    console.error("Alias removed.");
     console.log(address);
 
     return;
@@ -204,5 +205,6 @@ export async function main(args: string[]): Promise<void> {
     }),
   ]);
 
+  console.error(`Alias created (${worker ? `Worker: ${worker}` : `Forward to: ${to}`}).`);
   console.log(address);
 }

@@ -93,6 +93,7 @@ test("add registers the exact address and reuses the user's cf environment", () 
 
   expect(result.status).toBe(0);
   expect(result.stdout).toBe("github@example.com\n");
+  expect(result.stderr).toBe("Alias created (Worker: header-worker).\n");
   expect(instance.rules()).toEqual([rule("github@example.com", "created-rule")]);
   expect(instance.calls().every((call) => call.cwd === instance.directory)).toBe(true);
   expect(instance.calls().every((call) => call.token === "test-user-token")).toBe(true);
@@ -141,6 +142,7 @@ test("explicit options override saved settings without changing the file", () =>
   });
 
   expect(result.status).toBe(0);
+  expect(result.stderr).toBe("Alias created (Forward to: destination@example.net).\n");
 
   expect(instance.rules()[0]?.actions).toEqual([
     { type: "forward", value: ["destination@example.net"] },
@@ -264,6 +266,8 @@ test("list includes every page, and remove deletes only the exact requested alia
   const removed = instance.run(["remove", "service-50@example.com"]);
 
   expect(removed.status).toBe(0);
+  expect(removed.stdout).toBe("service-50@example.com\n");
+  expect(removed.stderr).toBe("Alias removed.\n");
   expect(instance.rules()).toEqual(initialRules.slice(0, 50));
 
   expect(instance.calls().filter((call) => call.args[2] === "delete")).toEqual([
@@ -299,8 +303,30 @@ test("cf failure preserves its exit status and stderr", () => {
 
   expect(result.status).toBe(7);
   expect(result.stderr).toContain("Cloudflare request failed.");
+  expect(result.stderr).not.toContain("Alias created");
   expect(result.stdout).toBe("");
   expect(instance.rules()).toEqual([]);
+});
+
+test("failed alias mutations do not report success", () => {
+  const instance = sandbox();
+  const created = instance.run(["add", "github"], { CFALIAS_TEST_FAILURE: "create" });
+
+  expect(created.status).toBe(7);
+  expect(created.stderr).toContain("Cloudflare request failed.");
+  expect(created.stderr).not.toContain("Alias created");
+  expect(created.stdout).toBe("");
+  expect(instance.rules()).toEqual([]);
+
+  expect(instance.run(["add", "github"]).status).toBe(0);
+
+  const removed = instance.run(["remove", "github"], { CFALIAS_TEST_FAILURE: "delete" });
+
+  expect(removed.status).toBe(7);
+  expect(removed.stderr).toContain("Cloudflare request failed.");
+  expect(removed.stderr).not.toContain("Alias removed");
+  expect(removed.stdout).toBe("");
+  expect(instance.rules()).toEqual([rule("github@example.com", "created-rule")]);
 });
 
 test("help is available without cf or configuration, while add requires cf", () => {
