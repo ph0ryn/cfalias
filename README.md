@@ -7,18 +7,17 @@ Requires Node.js 22.18+ and the [official Cloudflare CLI](https://developers.clo
 ```sh
 npm install -g cfalias
 
-export CFALIAS_DOMAIN=example.com
-export CFALIAS_WORKER=header-worker
-
-cfalias add github       # Register github@example.com
-cfalias add              # Register a random temp-...@example.com address
+cfalias add github       # Choose your domain and destination on first use
+cfalias add              # Register a random temp-... address
 cfalias list             # Print every page of rules as JSON
 cfalias remove github    # Remove the exact alias; a full address also works
 ```
 
+On first use in a terminal, select an active domain from Cloudflare, then an Email Worker or a verified Destination address. Your selection is saved in `~/.config/cfalias/config.json` (or `$XDG_CONFIG_HOME/cfalias/config.json`), so no environment setup is needed. Run `cfalias --configure` to change it.
+
 `add` prints the registered address, so `cfalias add | pbcopy` copies it on macOS.
 
-Use `--domain` and `--worker` to override the environment. For direct forwarding, use `--to verified@example.com` or `CFALIAS_TO` instead of a Worker. Destinations must already be configured in Cloudflare.
+Use `--domain` with `--worker` or `--to` to override saved settings for one invocation. `CFALIAS_DOMAIN`, `CFALIAS_WORKER`, and `CFALIAS_TO` also work; priority is options, environment, then saved settings. Destinations must already be configured in Cloudflare. For noninteractive setup, use `cfalias --configure --domain example.com --worker header-worker`.
 
 Each alias uses an exact Email Routing rule. Keep catch-all disabled to stop receiving mail at removed or unregistered addresses. Rules are managed in Cloudflare; there is no local alias database.
 

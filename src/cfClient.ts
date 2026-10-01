@@ -14,9 +14,10 @@ export class CfCommandError extends Error {
   }
 }
 
-export function runCf(args: string[]): string {
-  const result = spawnSync("cf", ["email-routing", "rules", ...args], {
+export function runCf(args: string[], accountId?: string): string {
+  const result = spawnSync("cf", args, {
     encoding: "utf8",
+    env: accountId ? { ...process.env, CLOUDFLARE_ACCOUNT_ID: accountId } : process.env,
     stdio: ["inherit", "pipe", "inherit"],
   });
 
@@ -38,44 +39,38 @@ export function runCf(args: string[]): string {
   return result.stdout;
 }
 
-export function listRules(domain: string): RoutingRule[] {
-  const rules: RoutingRule[] = [];
+export function listCf(args: string[], accountId?: string): Record<string, unknown>[] {
+  const items: Record<string, unknown>[] = [];
   const pageSize = 50;
 
   for (let page = 1; ; page += 1) {
     const output: unknown = JSON.parse(
-      runCf([
-        "list-account",
-        "--zone",
-        domain,
-        "--page",
-        String(page),
-        "--per-page",
-        String(pageSize),
-      ]),
+      runCf([...args, "--page", String(page), "--per-page", String(pageSize)], accountId),
     );
 
     if (
       !Array.isArray(output) ||
-      !output.every(
-        (rule: unknown) =>
-          typeof rule === "object" &&
-          rule !== null &&
-          "id" in rule &&
-          typeof rule.id === "string" &&
-          "matchers" in rule &&
-          Array.isArray(rule.matchers),
-      )
+      !output.every((rule: unknown) => typeof rule === "object" && rule !== null)
     ) {
-      throw new Error("cf returned an unexpected routing rule list.");
+      throw new Error("cf returned an unexpected list response.");
     }
 
-    rules.push(...(output as RoutingRule[]));
+    items.push(...(output as Record<string, unknown>[]));
 
     if (output.length < pageSize) {
-      return rules;
+      return items;
     }
   }
+}
+
+export function listRules(domain: string): RoutingRule[] {
+  const rules = listCf(["email-routing", "rules", "list-account", "--zone", domain]);
+
+  if (!rules.every((rule) => typeof rule["id"] === "string" && Array.isArray(rule["matchers"]))) {
+    throw new Error("cf returned an unexpected routing rule list.");
+  }
+
+  return rules as unknown as RoutingRule[];
 }
 
 export function matchesAddress(rule: RoutingRule, address: string): boolean {

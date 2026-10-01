@@ -11,6 +11,7 @@ const state = JSON.parse(readFileSync(stateFile, "utf8"));
 appendFileSync(
   callFile,
   `${JSON.stringify({
+    account: process.env.CLOUDFLARE_ACCOUNT_ID,
     args,
     cwd: process.cwd(),
     profile: process.env.CLOUDFLARE_PROFILE,
@@ -21,6 +22,38 @@ appendFileSync(
 if (process.env.CFALIAS_TEST_FAILURE) {
   console.error("Cloudflare request failed.");
   process.exit(7);
+}
+
+const page = Number(option("--page"));
+const count = Number(option("--per-page"));
+
+if (args[0] === "zones" && args[1] === "list") {
+  const zones = [
+    { account: { id: "example-account" }, name: "example.com" },
+    { account: { id: "other-account" }, name: "other.example.net" },
+  ];
+
+  console.log(JSON.stringify(zones.slice((page - 1) * count, page * count)));
+  process.exit(0);
+}
+
+if (args[0] === "workers" && args[1] === "scripts" && args[2] === "search") {
+  const workers = [{ script_name: "header-worker" }, { script_name: "other-worker" }];
+
+  console.log(JSON.stringify(workers.slice((page - 1) * count, page * count)));
+  process.exit(0);
+}
+
+if (args[0] === "email-routing" && args[1] === "addresses" && args[2] === "list") {
+  if (option("--verified") !== "true") {
+    throw new Error("Destination selection must request verified addresses.");
+  }
+
+  console.log(
+    JSON.stringify([{ email: "destination@example.net", verified: "2026-01-01T00:00:00Z" }]),
+  );
+
+  process.exit(0);
 }
 
 if (args[0] !== "email-routing" || args[1] !== "rules") {

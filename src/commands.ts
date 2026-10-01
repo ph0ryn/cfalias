@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 
 import packageInfo from "../package.json" with { type: "json" };
 import { listRules, matchesAddress, runCf } from "./cfClient.ts";
+import { type AliasConfig, configure, loadConfig, saveConfig } from "./config.ts";
 
 const help = `Usage: ${packageInfo.name} <command> [options]
 
@@ -12,18 +13,20 @@ Commands:
   remove <address> Remove the exact alias (a local name also works)
 
 Options:
+  --configure      Choose and save your domain and destination
   --domain <domain> Domain to manage (CFALIAS_DOMAIN)
   --worker <value>  Route new aliases to a Worker (CFALIAS_WORKER)
   --to <email>      Forward new aliases to a verified address (CFALIAS_TO)
   -h, --help       Show help
   -v, --version    Show version
 
+On first use, choose your domain and destination. Your selection is saved.
 Requires the official cf CLI on PATH. Authentication uses your existing cf setup.
 `;
 
 function getDomain(value: string | undefined): string {
   if (!value) {
-    throw new Error("Set --domain or CFALIAS_DOMAIN.");
+    throw new Error("Run cfalias --configure, or set --domain / CFALIAS_DOMAIN.");
   }
 
   const domain = value.toLowerCase();
@@ -55,11 +58,12 @@ function getAddress(value: string, domain: string): string {
   return `${local}@${domain}`;
 }
 
-export function main(args: string[]): void {
+export async function main(args: string[]): Promise<void> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
     args,
     options: {
+      configure: { type: "boolean" },
       domain: { type: "string" },
       help: { short: "h", type: "boolean" },
       to: { type: "string" },
@@ -80,6 +84,22 @@ export function main(args: string[]): void {
     return;
   }
 
+  if (values.configure) {
+    if (positionals.length > 0) {
+      throw new Error("Use cfalias --configure without a command.");
+    }
+
+    const config = await configure({
+      domain: values.domain === undefined ? undefined : getDomain(values.domain),
+      to: values.to,
+      worker: values.worker,
+    });
+
+    saveConfig(config);
+
+    return;
+  }
+
   const [command, name] = positionals;
 
   if (
@@ -95,7 +115,43 @@ export function main(args: string[]): void {
     throw new Error("--worker and --to are only used with add.");
   }
 
-  const domain = getDomain(values.domain ?? process.env["CFALIAS_DOMAIN"]);
+  const saved = loadConfig();
+  const environment = {
+    to: process.env["CFALIAS_TO"] || undefined,
+    worker: process.env["CFALIAS_WORKER"] || undefined,
+  };
+  const explicitDestination = values.worker !== undefined || values.to !== undefined;
+  let destination: Partial<AliasConfig> = saved;
+
+  if (explicitDestination) {
+    destination = { to: values.to, worker: values.worker };
+  } else if (environment.worker || environment.to) {
+    destination = environment;
+  }
+
+  let settings: Partial<AliasConfig> = {
+    domain: values.domain ?? (process.env["CFALIAS_DOMAIN"] || saved.domain),
+    to: destination.to,
+    worker: destination.worker,
+  };
+
+  if (settings.domain !== undefined) {
+    settings.domain = getDomain(settings.domain);
+  }
+
+  if (
+    !settings.domain ||
+    (command === "add" && settings.worker === undefined && settings.to === undefined)
+  ) {
+    if (process.stdin.isTTY) {
+      const config = await configure(settings);
+
+      saveConfig(config);
+      settings = config;
+    }
+  }
+
+  const domain = getDomain(settings.domain);
 
   if (command === "list") {
     console.log(JSON.stringify(listRules(domain), null, 2));
@@ -118,18 +174,16 @@ export function main(args: string[]): void {
       throw new Error(`No routing rule exists for ${address}.`);
     }
 
-    runCf(["delete", rule.id, "--zone", domain, "--force"]);
+    runCf(["email-routing", "rules", "delete", rule.id, "--zone", domain, "--force"]);
     console.log(address);
 
     return;
   }
 
-  const worker =
-    values.worker ?? (values.to === undefined ? process.env["CFALIAS_WORKER"] : undefined);
-  const to = values.to ?? (values.worker === undefined ? process.env["CFALIAS_TO"] : undefined);
+  const { worker, to } = settings;
 
   if (Boolean(worker) === Boolean(to)) {
-    throw new Error("Set exactly one of --worker / CFALIAS_WORKER or --to / CFALIAS_TO.");
+    throw new Error("Run cfalias --configure, or set exactly one of --worker or --to.");
   }
 
   if (listRules(domain).some((rule) => matchesAddress(rule, address))) {
@@ -137,6 +191,8 @@ export function main(args: string[]): void {
   }
 
   runCf([
+    "email-routing",
+    "rules",
     "create",
     "--zone",
     domain,

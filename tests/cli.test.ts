@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,10 +56,11 @@ function sandbox(rules: Rule[] = []) {
     CLOUDFLARE_API_TOKEN: "test-user-token",
     CLOUDFLARE_PROFILE: "test-user-profile",
     PATH: `${directory}${delimiter}${process.env["PATH"] ?? ""}`,
+    XDG_CONFIG_HOME: directory,
   };
 
   return {
-    calls(): { args: string[]; cwd: string; token: string; profile: string }[] {
+    calls(): { args: string[]; account?: string; cwd: string; token: string; profile: string }[] {
       const content = readFileSync(callFile, "utf8").trim();
 
       return content ? content.split("\n").map((line) => JSON.parse(line)) : [];
@@ -61,11 +70,12 @@ function sandbox(rules: Rule[] = []) {
     rules(): Rule[] {
       return JSON.parse(readFileSync(stateFile, "utf8")).rules;
     },
-    run(args: string[], extraEnv: NodeJS.ProcessEnv = {}) {
+    run(args: string[], extraEnv: NodeJS.ProcessEnv = {}, input?: string) {
       return spawnSync(process.execPath, [cliPath, ...args], {
         cwd: directory,
         encoding: "utf8",
         env: { ...env, ...extraEnv },
+        input,
       });
     },
   };
@@ -97,6 +107,123 @@ test("add without a name creates a temporary address", () => {
   expect(result.status).toBe(0);
   expect(address).toMatch(/^temp-[a-f0-9]{12}@example\.com$/);
   expect(instance.rules()[0]?.matchers).toEqual([{ field: "to", type: "literal", value: address }]);
+});
+
+test("saved settings allow add, list, and remove without environment setup", () => {
+  const instance = sandbox();
+  const configDirectory = join(instance.directory, "cfalias");
+  const env = { CFALIAS_DOMAIN: "", CFALIAS_TO: "", CFALIAS_WORKER: "" };
+
+  mkdirSync(configDirectory);
+
+  writeFileSync(
+    join(configDirectory, "config.json"),
+    JSON.stringify({ domain: "example.com", worker: "header-worker" }),
+  );
+
+  expect(instance.run(["add", "saved"], env).stdout).toBe("saved@example.com\n");
+  expect(JSON.parse(instance.run(["list"], env).stdout)).toHaveLength(1);
+  expect(instance.run(["remove", "saved"], env).status).toBe(0);
+  expect(instance.rules()).toEqual([]);
+});
+
+test("explicit options override saved settings without changing the file", () => {
+  const instance = sandbox();
+  const configDirectory = join(instance.directory, "cfalias");
+  const configFile = join(configDirectory, "config.json");
+  const config = JSON.stringify({ domain: "example.com", worker: "saved-worker" });
+
+  mkdirSync(configDirectory);
+  writeFileSync(configFile, config);
+
+  const result = instance.run(["add", "shop", "--to", "destination@example.net"], {
+    CFALIAS_WORKER: "",
+  });
+
+  expect(result.status).toBe(0);
+
+  expect(instance.rules()[0]?.actions).toEqual([
+    { type: "forward", value: ["destination@example.net"] },
+  ]);
+
+  expect(readFileSync(configFile, "utf8")).toBe(config);
+});
+
+test("invalid saved settings fail before cf runs", () => {
+  const instance = sandbox();
+  const configDirectory = join(instance.directory, "cfalias");
+
+  mkdirSync(configDirectory);
+  writeFileSync(join(configDirectory, "config.json"), "{broken");
+
+  const result = instance.run(["add", "github"]);
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("config.json");
+  expect(instance.calls()).toEqual([]);
+  expect(instance.run(["--help"]).status).toBe(0);
+});
+
+test("configure selects a domain and Worker once, then reuses the saved settings", () => {
+  const instance = sandbox();
+  const env = { CFALIAS_DOMAIN: "", CFALIAS_TO: "", CFALIAS_WORKER: "" };
+  const configured = instance.run(["--configure"], env, "2\n1\n2\n");
+  const configFile = join(instance.directory, "cfalias", "config.json");
+
+  expect(configured.status).toBe(0);
+  expect(configured.stdout).toBe("");
+
+  expect(JSON.parse(readFileSync(configFile, "utf8"))).toEqual({
+    domain: "other.example.net",
+    worker: "other-worker",
+  });
+
+  expect(instance.calls().find((call) => call.args[0] === "workers")?.account).toBe(
+    "other-account",
+  );
+
+  expect(instance.calls().every((call) => !["create", "delete"].includes(call.args[2] ?? ""))).toBe(
+    true,
+  );
+
+  expect(instance.run(["add", "shop"], env).stdout).toBe("shop@other.example.net\n");
+});
+
+test("configure can select a verified forwarding address", () => {
+  const instance = sandbox();
+  const env = { CFALIAS_DOMAIN: "", CFALIAS_TO: "", CFALIAS_WORKER: "" };
+  const result = instance.run(["--configure"], env, "1\n2\n1\n");
+
+  expect(result.status).toBe(0);
+
+  expect(
+    JSON.parse(readFileSync(join(instance.directory, "cfalias", "config.json"), "utf8")),
+  ).toEqual({
+    domain: "example.com",
+    to: "destination@example.net",
+  });
+
+  expect(instance.run(["add", "shop"], env).status).toBe(0);
+
+  expect(instance.calls().find((call) => call.args[1] === "addresses")?.account).toBe(
+    "example-account",
+  );
+
+  expect(instance.rules()[0]?.actions).toEqual([
+    { type: "forward", value: ["destination@example.net"] },
+  ]);
+});
+
+test("cancelled setup does not save settings or change routing rules", () => {
+  const instance = sandbox();
+  const env = { CFALIAS_DOMAIN: "", CFALIAS_TO: "", CFALIAS_WORKER: "" };
+  const result = instance.run(["--configure"], env, "1\n");
+
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("cancelled");
+  expect(existsSync(join(instance.directory, "cfalias", "config.json"))).toBe(false);
+  expect(instance.rules()).toEqual([]);
+  expect(instance.calls().every((call) => call.args[0] === "zones")).toBe(true);
 });
 
 test("an explicit forwarding destination overrides the default Worker", () => {
