@@ -23,7 +23,6 @@ jobs:
         uses: voidzero-dev/setup-vp@v1.21.1
         with:
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
           run-install: false
 
       - name: Check release tag
@@ -40,4 +39,4 @@ jobs:
         run: vp install --frozen-lockfile
 
       - name: Publish to npm with OIDC
-        run: npm exec --yes --package=npm@11.19.0 -- npm publish --access public
+        run: pnpm publish --access public --no-git-checks

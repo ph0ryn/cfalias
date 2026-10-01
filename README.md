@@ -5,7 +5,7 @@ Manage Cloudflare Email Routing aliases through your existing `cf` CLI.
 Requires Node.js 22.18+ and the [official Cloudflare CLI](https://developers.cloudflare.com/cf/) on `PATH`. Authenticate with `cf` as usual. `cfalias` does not install `cf` or store credentials. Tested with `cf` 1.0.0-beta.6.
 
 ```sh
-npm install -g cfalias
+pnpm add -g cfalias
 
 cfalias add github       # Choose your domain and destination on first use
 cfalias add              # Register a random temp-... address
@@ -27,27 +27,5 @@ Each alias uses an exact Email Routing rule. Keep catch-all disabled to stop rec
 vp install
 vp check
 vp run test
-npm pack
-```
-
-## Publishing
-
-GitHub Actions checks branches and pull requests. Tags matching `v<package.json version>` publish through npm Trusted Publishing; the existing `prepublishOnly` script runs checks, tests, and the build before publishing.
-
-Log in and register `ph0ryn/cfalias` and `publish.yml` as the Trusted Publisher (npm 11.15+):
-
-```sh
-npm login
-npm trust github cfalias --repo ph0ryn/cfalias --file publish.yml --allow-publish
-```
-
-The package must exist on npm before you can register the publisher. For a new package, `npm stage publish` creates a `0.0.0-stage` placeholder, allowing you to register the publisher before the first regular release. See [staged publishing](https://docs.npmjs.com/staged-publishing/).
-
-Releases use GitHub Actions OIDC without an npm token. See the [npm trusted publishing requirements](https://docs.npmjs.com/trusted-publishers/).
-
-After configuring the publisher, release a new version with:
-
-```sh
-npm version patch -m "chore(release): %s"
-git push origin main --follow-tags
+pnpm pack
 ```
