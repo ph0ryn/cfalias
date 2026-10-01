@@ -1,0 +1,43 @@
+{
+  "name": "cfalias",
+  "version": "0.1.0",
+  "description": "Manage Cloudflare Email Routing aliases with the official cf CLI.",
+  "keywords": [
+    "cli",
+    "cloudflare",
+    "email-alias",
+    "email-routing"
+  ],
+  "license": "MIT",
+  "bin": {
+    "cfalias": "dist/cli.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "check": "vp check",
+    "fix": "vp check --fix",
+    "format": "vp fmt",
+    "lint": "vp lint",
+    "test": "vp run build && vp test",
+    "prepack": "vp run build",
+    "prepublishOnly": "vp check && vp run test"
+  },
+  "devDependencies": {
+    "@stylistic/eslint-plugin": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "packageManager": "pnpm@11.22.0"
+}

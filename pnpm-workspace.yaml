@@ -1,0 +1,32 @@
+packages:
+  - .
+
+catalog:
+  "@stylistic/eslint-plugin": ^5.10.0
+  "@types/node": ^26.6.3
+  typescript: ^6.0.3
+  vite: npm:@voidzero-dev/vite-plus-core@1.0.0
+  vite-plus: 1.0.0
+  vitest: 5.0.1
+
+catalogMode: strict
+
+enablePrePostScripts: true
+
+minimumReleaseAge: 2880
+
+minimumReleaseAgeExclude:
+  - vite-plus@1.0.0
+  - "@voidzero-dev/*"
+
+overrides:
+  vite@*: "catalog:"
+  vitest@*: "catalog:"
+
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: "*"
+
+shellEmulator: true
