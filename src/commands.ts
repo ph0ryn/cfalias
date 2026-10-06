@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import { parseArgs } from "node:util";
 
 import packageInfo from "../package.json" with { type: "json" };
@@ -8,7 +8,7 @@ import { type AliasConfig, configure, loadConfig, saveConfig } from "./config.ts
 const help = `Usage: ${packageInfo.name} <command> [options]
 
 Commands:
-  add [name]       Register an alias; omit the name for a random temp-* address
+  add [name]       Register an alias; omit the name for a random temp.* address
   list             Print all routing rules as JSON
   remove <address> Remove the exact alias (a local name also works)
 
@@ -17,6 +17,7 @@ Options:
   --domain <domain> Domain to manage (CFALIAS_DOMAIN)
   --worker <value>  Route new aliases to a Worker (CFALIAS_WORKER)
   --to <email>      Forward new aliases to a verified address (CFALIAS_TO)
+  -r, --random <length> Append a random suffix of the specified length (add only)
   -h, --help       Show help
   -v, --version    Show version
 
@@ -42,9 +43,9 @@ function getDomain(value: string | undefined): string {
   return domain;
 }
 
-function getAddress(value: string, domain: string): string {
+function getAddress(value: string, domain: string, randomLength?: number): string {
   const parts = value.split("@");
-  const local = parts[0];
+  let local = parts[0];
 
   if (
     !local ||
@@ -53,6 +54,14 @@ function getAddress(value: string, domain: string): string {
     (parts.length === 2 && parts[1]?.toLowerCase() !== domain)
   ) {
     throw new Error("Use a local name or an address belonging to the configured domain.");
+  }
+
+  if (randomLength !== undefined) {
+    if (local.length + 1 + randomLength > 64) {
+      throw new Error("The name and random suffix must fit within 64 characters before @.");
+    }
+
+    local += `.${Array.from({ length: randomLength }, () => randomInt(36).toString(36)).join("")}`;
   }
 
   return `${local}@${domain}`;
@@ -66,6 +75,7 @@ export async function main(args: string[]): Promise<void> {
       configure: { type: "boolean" },
       domain: { type: "string" },
       help: { short: "h", type: "boolean" },
+      random: { short: "r", type: "string" },
       to: { type: "string" },
       version: { short: "v", type: "boolean" },
       worker: { type: "string" },
@@ -82,6 +92,20 @@ export async function main(args: string[]): Promise<void> {
     console.log(packageInfo.version);
 
     return;
+  }
+
+  let randomLength: number | undefined = undefined;
+
+  if (values.random !== undefined) {
+    if (positionals[0] !== "add") {
+      throw new Error("--random is only used with add.");
+    }
+
+    randomLength = Number(values.random);
+
+    if (!/^[1-9]\d*$/u.test(values.random) || randomLength > 62) {
+      throw new Error("--random must be a positive integer from 1 to 62.");
+    }
   }
 
   if (values.configure) {
@@ -159,7 +183,11 @@ export async function main(args: string[]): Promise<void> {
     return;
   }
 
-  const address = getAddress(name ?? `temp-${randomBytes(6).toString("hex")}`, domain);
+  const address = getAddress(
+    name ?? (randomLength === undefined ? `temp.${randomBytes(6).toString("hex")}` : "temp"),
+    domain,
+    randomLength,
+  );
 
   if (command === "remove") {
     const matches = listRules(domain).filter((rule) => matchesAddress(rule, address));

@@ -106,8 +106,64 @@ test("add without a name creates a temporary address", () => {
   const address = result.stdout.trim();
 
   expect(result.status).toBe(0);
-  expect(address).toMatch(/^temp-[a-f0-9]{12}@example\.com$/);
+  expect(address).toMatch(/^temp\.[a-f0-9]{12}@example\.com$/);
   expect(instance.rules()[0]?.matchers).toEqual([{ field: "to", type: "literal", value: address }]);
+});
+
+test.each([
+  { args: ["add", "-r", "3", "github"], length: 3, prefix: "github" },
+  { args: ["add", "--random", "5", "github"], length: 5, prefix: "github" },
+  { args: ["add", "-r3", "github@example.com"], length: 3, prefix: "github" },
+  { args: ["add", "-r", "3"], length: 3, prefix: "temp" },
+  { args: ["add", "-r", "62", "a"], length: 62, prefix: "a" },
+])("add appends the requested random suffix: $args", ({ args, prefix, length }) => {
+  const instance = sandbox([rule(`${prefix}@example.com`, "existing")]);
+  const result = instance.run(args);
+  const address = result.stdout.trim();
+
+  expect(result.status).toBe(0);
+  expect(address).toMatch(new RegExp(`^${prefix}\\.[a-z0-9]{${length}}@example\\.com$`));
+  expect(instance.rules()[1]).toEqual(rule(address, "created-rule"));
+  expect(instance.run(["remove", address]).status).toBe(0);
+  expect(instance.rules()).toEqual([rule(`${prefix}@example.com`, "existing")]);
+});
+
+test("random lengths must be positive integers that fit the local part", () => {
+  const instance = sandbox();
+
+  for (const length of ["0", "-1", "1.5", "1e3", "", "abc", "64", "999999999999999999999"]) {
+    const result = instance.run(["add", "github", `--random=${length}`]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("--random must be a positive integer");
+  }
+
+  const tooLong = instance.run(["add", "github", "-r", "58"]);
+
+  expect(tooLong.status).not.toBe(0);
+  expect(tooLong.stderr).toContain("64 characters");
+  expect(instance.run(["add", "github", "-r"]).status).not.toBe(0);
+  expect(instance.calls()).toEqual([]);
+});
+
+test("random suffixes are only used with add and preserve address validation", () => {
+  const instance = sandbox();
+
+  for (const args of [["list"], ["remove", "github"], ["--configure"]]) {
+    const result = instance.run([...args, "-r", "3"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("--random is only used with add");
+  }
+
+  for (const name of ["", ".", "github.", "github@other.example"]) {
+    const result = instance.run(["add", name, "-r", "3"]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Use a local name or an address");
+  }
+
+  expect(instance.calls()).toEqual([]);
 });
 
 test("saved settings allow add, list, and remove without environment setup", () => {
