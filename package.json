@@ -1,6 +1,6 @@
 {
   "name": "cfalias",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Manage Cloudflare Email Routing aliases with the official cf CLI.",
   "keywords": [
     "cli",
